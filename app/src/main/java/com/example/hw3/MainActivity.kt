@@ -1,10 +1,19 @@
 package com.example.hw3
 
-//import android.graphics.Bitmap
+import android.Manifest
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -35,8 +44,28 @@ import com.example.hw3.ui.theme.Hw3Theme
 import java.io.InputStream
 
 class MainActivity : ComponentActivity() {
+    private val channel = NotificationChannel("Hw3", "Hw3", NotificationManager.IMPORTANCE_DEFAULT)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val requestPermissionLauncher =
+            registerForActivityResult(
+                ActivityResultContracts.RequestPermission()
+            ) { isGranted: Boolean ->
+                if (!isGranted) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "需要權限才能使用此程式",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    this.finishAffinity()
+                }
+            }
+        requestPermissionLauncher.launch(
+            Manifest.permission.POST_NOTIFICATIONS
+        )
+
         setContent {
             Hw3Theme {
                 Surface(
@@ -61,7 +90,6 @@ class MainActivity : ComponentActivity() {
             imageUri = uri
             processedBitmap = null  // 选择新图片时，清除之前的处理结果
         }
-
 
         Box(modifier = Modifier.fillMaxSize()) {
 
@@ -96,14 +124,52 @@ class MainActivity : ComponentActivity() {
                 Button(onClick = { imagePickerLauncher.launch("image/*") }) {
                     Text("Select Image from Gallery")
                 }
+
                 // 添加一个按钮用于黑白化处理
+
+
+                val builder = Notification.Builder(this@MainActivity, "Hw3")
                 Button(onClick = {
                     imageUri?.let { uri ->
                         val inputStream: InputStream? =
                             contentResolver.openInputStream(uri)
                         val bitmap = BitmapFactory.decodeStream(inputStream)
                         processedBitmap = convertToBlackAndWhite(bitmap)
-                        // 你可以将 processedBitmap 显示在屏幕上，或者保存到文件系统
+//                        // 你可以将 processedBitmap 显示在屏幕上，或者保存到文件系统
+//                        val imageIntentUri =
+//                            FileProvider.getUriForFile(
+//                                this@MainActivity,
+//                                this@MainActivity.applicationContext.packageName + ".provider",
+//                                saveBitmapToFile(this@MainActivity, processedBitmap!!)
+//                            )
+                        val imageIntentUri = saveImageToGallery(this@MainActivity,
+                            processedBitmap!!)
+                        val imageIntent = Intent(Intent.ACTION_VIEW)
+                        imageIntent.setDataAndType(imageIntentUri, "image/*")
+                        val pendingIntent = PendingIntent.getActivity(
+                            this@MainActivity,
+                            0,
+                            imageIntent,
+                            PendingIntent.FLAG_IMMUTABLE
+                        )
+                        imageIntent.setPackage("com.google.android.apps.photos")
+                        imageIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+                        runOnUiThread {
+                            val notification: Notification =
+                                builder.setSmallIcon(R.drawable.ic_launcher_foreground)
+                                    .setContentTitle("Hw3")
+                                    .setContentText("圖片已處理好，點擊以開啟")
+                                    .setAutoCancel(true)
+                                    .setContentIntent(pendingIntent)
+                                    .build()
+
+
+                            val manager =
+                                getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                            manager.createNotificationChannel(channel)
+                            manager.notify(0, notification)
+                        }
                     }
                 }) {
                     Text("Convert to Black and White")
@@ -112,6 +178,35 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    //儲存圖片檔案
+
+    private fun saveImageToGallery(context: Context, bitmap: Bitmap,) :Uri {
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "RRRRRRRR.jpg")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(
+                MediaStore.Images.Media.RELATIVE_PATH,
+                "Pictures/${context.getString(R.string.app_name)}"
+            )
+            put(MediaStore.Images.Media.IS_PENDING, 1)
+        }
+
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+
+        uri?.let {
+            resolver.openOutputStream(it).use { outputStream ->
+                if (outputStream != null) {
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                }
+            }
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(it, values, null, null)
+        }
+
+        return uri!!
+    }
 
     private fun convertToBlackAndWhite(bitmap: Bitmap): Bitmap {
         val width = bitmap.width

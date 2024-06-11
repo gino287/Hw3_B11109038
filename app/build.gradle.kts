@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.hw3"
-        minSdk = 24
+        minSdk = 33
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -53,7 +53,7 @@ dependencies {
     //noinspection UseTomlInstead
     implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     implementation (libs.androidx.work.runtime.ktx)
-    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation(libs.coil.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
